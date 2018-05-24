@@ -2,7 +2,6 @@
 
 """Processes CV2 Coordinates into paths and heatmap"""
 
-import sys
 import cv2
 import time
 import serial
@@ -16,10 +15,7 @@ from Misc.CustomFunctions import format_secs
 from Misc.CustomClasses import StoppableProcess, ReadMessage, StopWatch, NewMessage
 from GUI.DataDisplays.SendRecvProtocols import SyncableMPArray
 from Concurrency.CV2Proc import CV2TargetAreaPerimeter
-if sys.version[0] == '2':
-    import Queue as Queue
-else:
-    import queue as Queue
+import queue as Queue
 
 
 # Stimulate mouse for STIM_ON seconds every STIM_TOTAL seconds
@@ -28,12 +24,14 @@ STIM_TOTAL = 1.0
 # Thread names
 POLLING = 'polling'
 SEND_SIGNAL = 'send_signal'
+# Arduino Pin
+ARDPIN = 10
 
 
 class ArduinoDevice(object):
     """Connects to external arduino hardware"""
     def __init__(self):
-        self.main_pin = 'd:6:o'  # digital, pin 6, output
+        self.main_pin = 'd:{}:o'.format(ARDPIN)  # digital, pin 6, output
         self.test_pin = 'd:13:o'  # ask arduino for connection status. Added benefit of seeing LED 13 as visual aid
         self.ping_state = 0
         self.manual_mode = False
@@ -224,8 +222,8 @@ class ProgressBar(object):
         self.mouse_in_target = False
         if not self.targ_perim.draw or coord == (None, None):
             return
-        cx, cy = self.targ_perim.x, self.targ_perim.y
-        if ((x-cx)**2 + (y-cy)**2) <= self.targ_perim.radius**2:
+        x1, x2, y1, y2 = self.targ_perim.x1, self.targ_perim.x2, self.targ_perim.y1, self.targ_perim.y2
+        if x1 <= x <= x2 and y1 <= y <= y2:
             self.mouse_in_target = True
 
     def send_stim_to_mouse(self):
@@ -789,7 +787,7 @@ class CoordinateProcessor(StoppableProcess):
                             'Normalized X', 'Normalized Y'):
                 f.write('{},'.format(element))
             f.write('\n')
-            for element in (self.progbar.targ_perim.x, self.progbar.targ_perim.y, self.progbar.targ_perim.radius,
+            for element in (self.progbar.targ_perim.cx, self.progbar.targ_perim.cy, self.progbar.targ_perim.radius,
                             self.progbar.targ_perim.norm_x, self.progbar.targ_perim.norm_y):
                 f.write('{},'.format(element))
             f.write('\n')

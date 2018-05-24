@@ -2,7 +2,6 @@
 
 """CV2 Operations. Returns processed image and mouse coordinates"""
 
-import sys
 import cv2
 import time
 import numpy as np
@@ -12,10 +11,7 @@ from collections import deque
 from GUI.DataDisplays.SendRecvProtocols import SyncableMPArray
 from Misc.CustomClasses import *
 from Misc.GlobalVars import *
-if sys.version[0] == '2':
-    import Queue as Queue
-else:
-    import queue as Queue
+import queue as Queue
 
 
 class CV2TargetAreaPerimeter(object):
@@ -24,21 +20,34 @@ class CV2TargetAreaPerimeter(object):
         self.draw = False
         self.norm_x = None
         self.norm_y = None
-        self.x = None
-        self.y = None
+        self.cx = None
+        self.cy = None
         self.radius = None
+        self.x1, self.y1 = None, None
+        self.x2, self.y2 = None, None
 
     def toggle_draw(self, params):
         """Update params and toggle draw or not draw"""
         if params:
             self.draw = True
-            (self.x, self.y), (self.norm_x, self.norm_y), self.radius = params
+            (self.cx, self.cy), (self.norm_x, self.norm_y), self.radius = params
+            self.x1 = self.cx - self.radius
+            self.x2 = self.cx + self.radius
+            self.y1 = self.cy - self.radius
+            self.y2 = self.cy + self.radius
         else:
             self.draw = False
 
     def update_radius(self, radius):
         """Sets new radius"""
         self.radius = radius
+        try:
+            self.x1 = self.cx - self.radius
+            self.x2 = self.cx + self.radius
+            self.y1 = self.cy - self.radius
+            self.y2 = self.cy + self.radius
+        except TypeError:  # this occurs if we update radius before we receive x,y params to draw
+            pass
 
 
 class CV2Processor(StoppableProcess):
@@ -240,8 +249,10 @@ class CV2Processor(StoppableProcess):
         # Generate image with basic cv2 drawings
         disp_frame = np.dstack((disp_frame, disp_frame, disp_frame))  # RGB Stack
         if self.targ_perim.draw:
-            cv2.circle(disp_frame, (self.targ_perim.x, self.targ_perim.y), self.targ_perim.radius,
-                       (0, 255, 0), thickness=2)
+            cv2.rectangle(disp_frame,
+                          (self.targ_perim.x1, self.targ_perim.y1),
+                          (self.targ_perim.x2, self.targ_perim.y2),
+                          (0, 255, 0), thickness=2)
         if not contours:
             cv2.putText(disp_frame, 'x, y: (NA, NA)', org=(10, 460), color=(255, 0, 0),
                         fontFace=cv2.FONT_HERSHEY_COMPLEX, fontScale=0.35)

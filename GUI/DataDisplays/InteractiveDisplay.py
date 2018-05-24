@@ -114,7 +114,7 @@ class GuiTargetAreaIndicator(qg.QGraphicsEllipseItem):
         self.signal.emit(cntrl_pressed, self.data)
 
 
-class GuiTargetAreaHighlight(qg.QGraphicsEllipseItem):
+class GuiTargetAreaHighlight(qg.QGraphicsRectItem):
     """A Highlight for currently hovered target region"""
     def __init__(self, scene, signal, zval):
         super(GuiTargetAreaHighlight, self).__init__(scene=scene)
