@@ -34,9 +34,11 @@ class ArduinoDevice(object):
         self.main_pin = 'd:{}:o'.format(ARDPIN)  # digital, pin 6, output
         self.test_pin = 'd:13:o'  # ask arduino for connection status. Added benefit of seeing LED 13 as visual aid
         self.ping_state = 0
+        self.ping_interval = 1
+        self.ping_timer = StopWatch()
+        self.ping_timer.start()
         self.manual_mode = False
         self.connected = False
-        self.displaying_error_msg = False
 
     def connect(self):
         """Attempts to connect to the device"""
@@ -97,11 +99,15 @@ class ArduinoDevice(object):
 
     def ping(self):
         """test if arduino is still connected"""
-        try:
-            self.ping_state ^= 1
-            self.test_output.write(self.ping_state)
-        except (serial.serialutil.SerialTimeoutException, serial.serialutil.SerialException, AttributeError):
-            self.connected = False
+        if self.ping_timer.elapsed() > self.ping_interval:
+            try:
+                self.ping_state ^= 1
+                self.test_output.write(self.ping_state)
+            except (serial.serialutil.SerialTimeoutException, serial.serialutil.SerialException, AttributeError):
+                self.connected = False
+            finally:
+                self.ping_timer.reset()
+                self.ping_timer.start()
 
 
 class ProgressBar(object):
@@ -127,6 +133,7 @@ class ProgressBar(object):
         self.start_time = None
         self.output_array = None
         self.image = None
+        self.displaying_error_image = False
         self.targ_perim = CV2TargetAreaPerimeter()
         # Progress bar segments for each element
         self.pbar_slice = None
@@ -338,20 +345,25 @@ class ProgressBar(object):
 
     def ping_arduino(self, updating):
         """Pings arduino, displays errors, attempt to reconnect"""
+        self.arduino.ping()
         if self.output_array.can_send_img():
             if not self.arduino.connected:
-                self.output_array.fill(0)
-                cv2.putText(self.output_array, 'ARDUINO ERROR. RECONNECT DEVICE', (10, 60), cv2.FONT_HERSHEY_SIMPLEX,
-                            1, (255, 255, 255), 2)
-                self.arduino.displaying_error_msg = True
+                self.display_error_img()
             elif updating:
                 self.set_timer_text(reset=False)
-            elif not updating and self.arduino.displaying_error_msg:
-                self.output_array.send_img(self.image)
-                self.arduino.displaying_error_msg = False
+            elif not updating and self.displaying_error_image:
+                self.displaying_error_image = False
+                self.output_array[:] = self.image
             self.output_array.set_can_recv_img()
         if not self.arduino.connected:
             self.arduino.connect()
+
+    def display_error_img(self):
+        if not self.displaying_error_image:
+            self.displaying_error_image = True
+            self.output_array.fill(0)
+            cv2.putText(self.output_array, 'ARDUINO ERROR. RECONNECT DEVICE', (10, 60), cv2.FONT_HERSHEY_SIMPLEX,
+                        1, (255, 255, 255), 2)
 
 
 class Heatmap(object):
@@ -741,8 +753,6 @@ class CoordinateProcessor(StoppableProcess):
                 self.heatmap.output_array.set_can_recv_img()
                 self.pathing.output_array.set_can_recv_img()
                 self.gradient.output_array.set_can_recv_img()
-            # Ping arduino hardware to make sure still connected
-            self.progbar.arduino.ping()
         # We update progress bar regardless if there were new coordinates available
         # Update Progress Bar; if mouse inside target region, we determine if should stimulate
         if not self.progbar.can_update():
