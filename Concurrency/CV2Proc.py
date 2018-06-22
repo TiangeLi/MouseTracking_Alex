@@ -30,7 +30,7 @@ class CV2TargetAreaPerimeter(object):
         """Update params and toggle draw or not draw"""
         if params:
             self.draw = True
-            (self.cx, self.cy), (self.norm_x, self.norm_y), self.radius = params
+            (self.cx, self.cy), self.radius = params
             self.x1 = self.cx - self.radius
             self.x2 = self.cx + self.radius
             self.y1 = self.cy - self.radius
@@ -73,8 +73,8 @@ class CV2Processor(StoppableProcess):
         # CV2 Params
         self.num_calib_frames = 20
         self.accum_fn = np.mean
-        self.thresh = -30
-        self.tracking_size = 350.0
+        self.thresh = -5
+        self.tracking_size = 2500
         self.opening_radius = 4
         # Init CV2 drawn objects
         self.targ_perim = None

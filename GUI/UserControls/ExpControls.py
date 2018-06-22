@@ -92,13 +92,13 @@ class GuiMainControls(qg.QWidget):
         """Connects child widget signal and slots"""
         self.targ_area_config.newTargAreasSignal.\
             connect(lambda: self.curr_exp_config.targ_region_selected(selected=False))
-        self.curr_exp_config.expStartedSignal.\
-            connect(self.targ_area_config.set_curr_selection_tested)
 
 
 class GuiTargetAreaConfigs(qg.QGroupBox):
     """Changes Target Area Radius and displays target area settings"""
     newTargAreasSignal = qc.pyqtSignal()
+    getNewLocSignal = qc.pyqtSignal()
+    fineAdjustSignal = qc.pyqtSignal(tuple)
 
     def __init__(self, dirs):
         super(GuiTargetAreaConfigs, self).__init__('Mouse Target Region')
@@ -107,8 +107,8 @@ class GuiTargetAreaConfigs(qg.QGroupBox):
         self.grid = qg.QGridLayout()
         self.setLayout(self.grid)
         self.init_radius_widget()
-        self.init_data_display()
-        self.init_get_new_coords_wgt()
+        self.init_loc_widget()
+        self.init_loc_adjust_widget()
         self.setMaximumSize(self.sizeHint())
 
     # Setup widgets
@@ -126,56 +126,35 @@ class GuiTargetAreaConfigs(qg.QGroupBox):
         self.grid.addWidget(self.rad_entry, 0, 1)
         self.grid.addWidget(self.confirm_btn, 0, 2)
 
-    def init_data_display(self):
-        """Displays internal data of all target area indicators"""
-        frame = GuiSimpleFrame(name='Target Locations')
-        frame.grid.setAlignment(qAlignCenter)
-        self.grid.addWidget(frame, 2, 0, 1, 3)
-        # Static Labels
-        scaled = qg.QLabel('Scaled (X, Y)')
-        normalized = qg.QLabel('Normalized')
-        tested = qg.QLabel('Tested')
-        scaled.setAlignment(qAlignCenter)
-        normalized.setAlignment(qAlignCenter)
-        tested.setAlignment(qAlignCenter)
-        # Grid
-        frame.addWidget(scaled, 0, 1)
-        frame.addWidget(normalized, 0, 2)
-        frame.addWidget(tested, 0, 3)
-        # Active Labels
-        self.info_displays = []
-        for area in self.dirs.settings.last_targ_areas.areas:
-            display = GuiTargAreaInfoDisplay(area)
-            display.add_to_grid(frame.grid)
-            self.info_displays.append(display)
-        # Save to profile
-        self.targ_areas_dropdown = GuiDropdownWithWarning()
-        self.targ_areas_dropdown.setEditable(True)
-        self.targ_areas_dropdown.activated.connect(self.select_pts_from_settings)
-        self.set_targ_areas_dropdown()
-        self.save_targs_btn = qg.QPushButton('Save Coordinates')
-        self.save_targs_btn.clicked.connect(self.save_target_regions)
-        self.grid.addWidget(self.targ_areas_dropdown, 3, 0, 1, 2)
-        self.grid.addWidget(self.save_targs_btn, 3, 2)
+    def init_loc_widget(self):
+        """Get and configure target location"""
+        frame = GuiSimpleFrame('Get Target Area Center')
+        self.get_loc_btn = GuiFlipBtn('Get Location', 'Cancel', flipped_color=qBgRed)
+        self.get_loc_btn.clicked.connect(self.get_location)
+        frame.addWidget(self.get_loc_btn)
+        self.grid.addWidget(frame, 1, 0, 1, 3)
 
-    def init_get_new_coords_wgt(self):
-        """Functions and settings to get new target coordinates"""
-        # Widgets
-        min_dist_btwn_label = qg.QLabel('Min Dist: ')
-        self.min_dist_box = qg.QComboBox()
-        self.new_coords_btn = GuiMultiStateBtn('Resample', reduce_radius=('Reduce Radius!', qBgRed))
-        self.new_coords_btn.clicked.connect(self.generate_new_pts)
-        # Set widget initial params
-        self.min_dist_box.addItem('0')
-        self.min_dist_box.addItem('Radius')
-        self.min_dist_box.addItem('Diameter')
-        self.min_dist_box.addItem('R + Edge')
-        self.min_dist_box.addItem('D + Edge')
-        self.min_dist_box.setMaximumWidth(80)
-        # Grid
-        self.grid.addWidget(min_dist_btwn_label, 1, 0)
-        self.grid.addWidget(self.min_dist_box, 1, 1)
-        self.grid.addWidget(self.new_coords_btn, 1, 2)
+    def init_loc_adjust_widget(self):
+        """Fine adjustment of target location"""
+        frame = GuiSimpleFrame('Fine Adjustment')
+        xlabel = qg.QLabel('X')
+        xlabel.setAlignment(qAlignCenter)
+        ylabel = qg.QLabel('Y')
+        ylabel.setAlignment(qAlignCenter)
+        self.xentry = GuiIntOnlyEntry(max_digits=3, default_text=self.dirs.settings.last_targ_areas.areas[0].x,
+                                      minimum=0, maximum=VID_DIM[1])
+        self.yentry = GuiIntOnlyEntry(max_digits=3, default_text=self.dirs.settings.last_targ_areas.areas[0].y,
+                                      minimum=0, maximum=VID_DIM[0])
+        self.xentry.setMaximumWidth(30)
+        self.yentry.setMaximumWidth(30)
+        self.set_loc_btn = qg.QPushButton('Confirm')
+        self.set_loc_btn.clicked.connect(self.fine_adjust_loc)
+        frame.addWidget(xlabel)
+        frame.addWidget(ylabel, 0, 1)
+        frame.addWidget(self.xentry, 1, 0)
+        frame.addWidget(self.yentry, 1, 1)
+        frame.addWidget(self.set_loc_btn, 1, 2)
+        self.grid.addWidget(frame, 2, 0, 1, 3)
 
     # Update radius
     def update_radius(self):
@@ -188,118 +167,33 @@ class GuiTargetAreaConfigs(qg.QGroupBox):
         msg = NewMessage(cmd=CMD_TARG_RADIUS, val=radius)
         self.output_msgs.put_nowait(msg)
 
-    # Data display functions
-    def load_from_data(self, cntrl_key_pressed, data):
-        """Highlight an info display based on data received"""
-        selected = [display for display in self.info_displays if display.selected]
-        if not cntrl_key_pressed:
-            if len(selected) > 1:
-                for obj in selected:
-                    obj.selected = False
-            else:
-                for obj in selected:
-                    if obj.data != data:
-                        obj.selected = False
-        for obj in self.info_displays:
-            if obj.data == data:
-                obj.selected = not obj.selected
-            obj.set_color()
+    # Get New Location
+    def get_location(self):
+        """Signals to get new target location"""
+        self.get_loc_btn.toggle_state()
+        self.getNewLocSignal.emit()
+        self.confirm_btn.setEnabled(not self.confirm_btn.isEnabled())
+        self.rad_entry.setEnabled(not self.rad_entry.isEnabled())
+        self.xentry.setEnabled(not self.xentry.isEnabled())
+        self.yentry.setEnabled(not self.yentry.isEnabled())
+        self.set_loc_btn.setEnabled(not self.set_loc_btn.isEnabled())
 
-    def indicators_reshaped(self, targ_area_data):
-        """Change scaled X and Y when indicators are reshaped after setting bounding coords"""
-        for x, y, data in targ_area_data:
-            for display in self.info_displays:
-                if data == display.data:
-                    display.set_xy_labels(x, y)
-                    break
+    def got_location(self, loc):
+        self.get_loc_btn.toggle_state()
+        self.confirm_btn.setEnabled(not self.confirm_btn.isEnabled())
+        self.rad_entry.setEnabled(not self.rad_entry.isEnabled())
+        self.xentry.setEnabled(not self.xentry.isEnabled())
+        self.yentry.setEnabled(not self.yentry.isEnabled())
+        self.set_loc_btn.setEnabled(not self.set_loc_btn.isEnabled())
+        self.xentry.setText(str(loc[0]))
+        self.yentry.setText(str(loc[1]))
 
-    # Generate new coords and save to settings
-    def generate_new_pts(self):
-        """Create new target region centers from 2D gaussian"""
-        param_selector = {
-            'Radius': (4, 1, False),
-            'Diameter': (8, 2, False),
-            'R + Edge': (7, 1, True),
-            'D + Edge': (10, 2, True),
-        }
-        selection = self.min_dist_box.currentText()
-        # Check radius
-        if selection != '0':
-            (x1, y1), (x2, y2) = self.dirs.settings.bounding_coords
-            div_factor = param_selector[selection][0]
-            min_sep = param_selector[selection][1]
-            with_edge = param_selector[selection][2]
-            maximum_radius = min((x2-x1)/div_factor, (y2-y1)/div_factor)
-            if self.dirs.settings.target_area_radius > maximum_radius:
-                self.new_coords_btn.toggle_state('reduce_radius')
-                return
-            else:
-                self.new_coords_btn.toggle_state('default')
-                self.dirs.settings.last_targ_areas = TargetAreas(check_radius=True,
-                                                                 min_sep=min_sep,
-                                                                 with_edge=with_edge,
-                                                                 dirs=self.dirs)
-        # Don't check radius
-        elif selection == '0':
-            self.dirs.settings.last_targ_areas = TargetAreas(check_radius=False)
-        # Set own data displays first
-        areas = (area for area in self.dirs.settings.last_targ_areas.areas)
-        for display in self.info_displays:
-            display.set_data(data=next(areas))
-        # emit signal to other widgets
-        # main interactive display will also send back scaled x, y, which will pass into self.indicators_reshaped
-        self.newTargAreasSignal.emit()
-
-    def set_targ_areas_dropdown(self):
-        """Adds fields to dropdown box"""
-        self.targ_areas_dropdown.clear()
-        self.targ_areas_dropdown.addItem('')
-        for name in self.dirs.settings.target_areas:
-            self.targ_areas_dropdown.addItem(name)
-        if self.dirs.settings.last_targ_areas.name is not None:
-            name = self.dirs.settings.last_targ_areas.name
-            index = self.targ_areas_dropdown.findText(name, qc.Qt.MatchFixedString)
-            self.targ_areas_dropdown.setCurrentIndex(index)
-
-    def save_target_regions(self):
-        """Saves currently displayed set of target regions"""
-        name = self.targ_areas_dropdown.currentText().strip()
-        if name == '':
-            self.targ_areas_dropdown.visual_warning()
-            return
-        elif name in self.dirs.settings.target_areas:
-            msg = 'Overwrite this Save?'
-            nuke = qg.QMessageBox.warning(self, 'WARNING', msg, qg.QMessageBox.No | qg.QMessageBox.Yes,
-                                          qg.QMessageBox.No)
-            if nuke == qg.QMessageBox.No:
-                return
-        curr_coords = self.dirs.settings.last_targ_areas
-        curr_coords.name = name
-        self.dirs.settings.target_areas[name] = curr_coords
-        self.set_targ_areas_dropdown()
-
-    def select_pts_from_settings(self):
-        """Grabs target area coordinates from self.dirs.settings"""
-        name = self.targ_areas_dropdown.currentText()
-        if name == '':
-            return
-        areas = self.dirs.settings.target_areas[name]
-        self.dirs.settings.last_targ_areas = areas
-        # Set own data displays first
-        areas = (area for area in self.dirs.settings.last_targ_areas.areas)
-        for display in self.info_displays:
-            display.set_data(data=next(areas))
-        # emit signal to other widgets
-        # main interactive display will also send back scaled x, y, which will pass into self.indicators_reshaped
-        self.newTargAreasSignal.emit()
-
-    def set_curr_selection_tested(self):
-        """Set the tested attribute of the currently selected field to True
-        Used by START button; we set a target region to TESTED if we start the experiment with it active"""
-        selected = [display for display in self.info_displays if display.selected]
-        if len(selected) == 1:
-            selected[0].data.tested = True
-            selected[0].tested_chkbox.setChecked(True)
+    # Fine adjustment
+    def fine_adjust_loc(self):
+        """Sends finely adjusted location data"""
+        x = abs(int(self.xentry.text().strip()))
+        y = abs(int(self.yentry.text().strip()))
+        self.fineAdjustSignal.emit((x, y))
 
 
 class GuiStartStopControls(qg.QGroupBox):
@@ -326,6 +220,7 @@ class GuiStartStopControls(qg.QGroupBox):
         # Set widgets to initial state
         self.start_btn.setEnabled(False)
         self.start_btn.clicked.connect(self.run_experiment)
+        self.targ_region_selected(selected=True)
         # add to grid
         self.grid.addWidget(name_label, 0, 0)
         self.grid.addWidget(self.name_entry, 0, 1)
@@ -462,8 +357,14 @@ class GuiVideoOperations(qg.QWidget):
     def __init__(self, dirs):
         super(GuiVideoOperations, self).__init__()
         self.dirs = dirs
+        self.is_enabled = True
         self.output_msgs = PROC_HANDLER_QUEUE
         self.init_btns()
+
+    def set_enabled(self, enable):
+        for w in [self.bounds_frm, self.manual_frm, self.recalib_frm, self.vidsrc_frm]:
+            w.setEnabled(enable)
+        self.is_enabled = enable
 
     def init_btns(self):
         """Setup all buttons and add to grid"""

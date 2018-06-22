@@ -119,21 +119,26 @@ class MasterGui(qg.QWidget):
             connect(self.vid_cntrls.got_new_bounds)
         self.data_displays.cmr_disp.boundsSetSignal.\
             connect(lambda: self.exp_cntrls.setEnabled(not self.exp_cntrls.isEnabled()))
-        self.data_displays.cmr_disp.indicators.targToggledSignal.\
-            connect(self.exp_cntrls.targ_area_config.load_from_data)
-        self.data_displays.cmr_disp.indicators.targReshapedSignal.\
-            connect(self.exp_cntrls.targ_area_config.indicators_reshaped)
-        self.data_displays.cmr_disp.indicators.enableStartSignal.\
-            connect(self.exp_cntrls.curr_exp_config.targ_region_selected)
-        # Main controls
-        self.exp_cntrls.targ_area_config.newTargAreasSignal.\
-            connect(self.data_displays.cmr_disp.reset_targ_region_inds)
+        self.data_displays.cmr_disp.targLocSetSignal.\
+            connect(self.exp_cntrls.targ_area_config.got_location)
+        self.data_displays.cmr_disp.targLocSetSignal.\
+            connect(lambda: self.vid_cntrls.set_enabled(not self.vid_cntrls.is_enabled))
+        self.data_displays.cmr_disp.targLocSetSignal.\
+            connect(lambda: self.exp_cntrls.curr_exp_config.setEnabled(not self.exp_cntrls.curr_exp_config.isEnabled()))
+        # Main controls)
         self.exp_cntrls.curr_exp_config.expStartedSignal.\
             connect(self.run_experiment)
+        self.exp_cntrls.targ_area_config.getNewLocSignal.connect(self.data_displays.cmr_disp.get_new_targ_loc)
+        self.exp_cntrls.targ_area_config.getNewLocSignal.\
+            connect(lambda: self.vid_cntrls.set_enabled(not self.vid_cntrls.is_enabled))
+        self.exp_cntrls.targ_area_config.getNewLocSignal.\
+            connect(lambda: self.exp_cntrls.curr_exp_config.setEnabled(not self.exp_cntrls.curr_exp_config.isEnabled()))
+        self.exp_cntrls.targ_area_config.fineAdjustSignal.\
+            connect(self.data_displays.cmr_disp.recv_new_targ_loc)
 
     def initialize_widgets(self):
         """After connecting signals, some widgets need further initialization"""
-        self.data_displays.cmr_disp.indicators.reshape_indicators()
+        pass
 
     def run_experiment(self, run_exp, trial_params):
         """Triggered by start button signal. Sends recording signal to Recording process, and enable/disable widgets"""
@@ -145,8 +150,7 @@ class MasterGui(qg.QWidget):
             self.vid_cntrls.recalib_frm.setEnabled(False)
             self.data_displays.cmr_disp.setEnabled(False)
             self.exp_cntrls.targ_area_config.setEnabled(False)
-            self.data_displays.cmr_disp.indicators.hide_objs()
-            self.data_displays.cmr_disp.indicators.targ_area_highlight.hide()
+            self.data_displays.cmr_disp.targ_center_indicator.hide()
             self.exp_cntrls.curr_exp_config.name_entry.setEnabled(False)
             self.exp_cntrls.curr_exp_config.start_btn.setEnabled(False)
             self.send_message(cmd=CMD_START, val=trial_params)
@@ -171,8 +175,7 @@ class MasterGui(qg.QWidget):
             self.vid_cntrls.recalib_frm.setEnabled(True)
             self.data_displays.cmr_disp.setEnabled(True)
             self.exp_cntrls.targ_area_config.setEnabled(True)
-            self.data_displays.cmr_disp.indicators.show_objs()
-            self.data_displays.cmr_disp.indicators.targ_area_highlight.show()
+            self.data_displays.cmr_disp.targ_center_indicator.show()
             self.exp_cntrls.curr_exp_config.name_entry.setEnabled(True)
             self.exp_cntrls.curr_exp_config.start_btn.setEnabled(True)
             self.exp_cntrls.curr_exp_config.start_btn.toggle_state('START')

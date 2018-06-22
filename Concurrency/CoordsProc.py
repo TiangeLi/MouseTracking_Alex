@@ -25,7 +25,7 @@ STIM_TOTAL = 1.0
 POLLING = 'polling'
 SEND_SIGNAL = 'send_signal'
 # Arduino Pin
-ARDPIN = 10
+ARDPIN = 6
 
 
 class ArduinoDevice(object):
@@ -36,6 +36,7 @@ class ArduinoDevice(object):
         self.ping_state = 0
         self.manual_mode = False
         self.connected = False
+        self.displaying_error_msg = False
 
     def connect(self):
         """Attempts to connect to the device"""
@@ -342,10 +343,12 @@ class ProgressBar(object):
                 self.output_array.fill(0)
                 cv2.putText(self.output_array, 'ARDUINO ERROR. RECONNECT DEVICE', (10, 60), cv2.FONT_HERSHEY_SIMPLEX,
                             1, (255, 255, 255), 2)
+                self.arduino.displaying_error_msg = True
             elif updating:
                 self.set_timer_text(reset=False)
-            elif not updating:
-                self.reset_progbar_img()
+            elif not updating and self.arduino.displaying_error_msg:
+                self.output_array.send_img(self.image)
+                self.arduino.displaying_error_msg = False
             self.output_array.set_can_recv_img()
         if not self.arduino.connected:
             self.arduino.connect()

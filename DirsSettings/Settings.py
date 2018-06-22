@@ -24,19 +24,16 @@ class MainSettings(object):
         """Example settings for first time users"""
         self.last_save_dir = HOME_DIR + '\\Desktop\\MouseTracking'
         self.ttl_time = 600.0  # in secs; 10 min Default
-        self.last_targ_areas = TargetAreas(check_radius=False)
+        self.last_targ_areas = TargetAreas()
+        self.last_targ_areas.areas.append(SingleTargetArea(320, 240, area_id=0))
 
 
 # Target Area Containers and Functions
 class TargetAreas(object):
     """A group of target regions"""
-    def __init__(self, check_radius, min_sep=1, with_edge=False, dirs=None):
+    def __init__(self):
         self.name = None
         self.areas = []
-        self.generate_targ_areas(check_radius=check_radius,
-                                 min_sep=min_sep,
-                                 with_edge=with_edge,
-                                 dirs=dirs)
 
     def generate_targ_areas(self, check_radius, min_sep, with_edge, dirs):
         """Randomly sample num points from a 2D normal"""

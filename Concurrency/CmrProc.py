@@ -16,6 +16,10 @@ else:
     import queue as Queue
 
 
+# Do we restrict camera exposure?
+RESTRICT_EXPOSURE = True
+
+
 class CameraDevice(cap.Camera):
     """Container for PTGrey FireFly Camera Hardware"""
     def __init__(self):
@@ -45,7 +49,8 @@ class CameraDevice(cap.Camera):
             cam_id = bus.getCameraFromIndex(0)
             self.connect(cam_id)
             self.setVideoModeAndFrameRate(cap.VIDEO_MODE.VM_640x480Y8, PYCAP_FRAMERATE)
-            self.set_properties()
+            if RESTRICT_EXPOSURE:
+                self.set_properties()
             self.startCapture()
         except self.cmr_err:
             self.running = False
